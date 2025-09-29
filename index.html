@@ -253,8 +253,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
-
+        
         // --- Firebase Configuration ---
         const firebaseConfig = {
             apiKey: "AIzaSyBW1nscMk_g9hcc908p1rTUXcWU7qQgmNU",
@@ -268,7 +267,7 @@
         const appId = firebaseConfig.appId;
         
         // --- Firebase Globals ---
-        let app, db, auth, storage;
+        let app, db, auth;
         
         // --- Main App Logic ---
         const main = async () => {
@@ -276,7 +275,6 @@
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
-                storage = getStorage(app);
                 await signInAnonymously(auth);
                 console.log("Firebase initialized and signed in anonymously");
             } catch(e) {
@@ -367,12 +365,34 @@
 
                 try {
                     if (file) {
-                        const fileName = `${Date.now()}_${file.name}`;
-                        const storageRef = ref(storage, `checklist-photos/${fileName}`);
-                        const snapshot = await uploadBytes(storageRef, file);
-                        data.photoURL = await getDownloadURL(snapshot.ref);
-                    }
+                        saveButton.textContent = 'Uploading Photo...';
+                        
+                        // --- IMPORTANT: PASTE YOUR IMGBB API KEY HERE ---
+                        const apiKey = 'fbb2ff133afc872c54b329b723a36419';
+                        // ----------------------------------------------------
 
+                        if (apiKey === 'YOUR_IMGBB_API_KEY') {
+                             throw new Error("ImgBB API key is not set. Please get a key from api.imgbb.com and add it to index.html");
+                        }
+
+                        const formData = new FormData();
+                        formData.append('key', apiKey);
+                        formData.append('image', file);
+
+                        const response = await fetch('https://api.imgbb.com/1/upload', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        const result = await response.json();
+
+                        if (result.success) {
+                            data.photoURL = result.data.url;
+                        } else {
+                            throw new Error(`Image upload failed: ${result.error.message}`);
+                        }
+                    }
+                    
+                    saveButton.textContent = 'Saving Entry...';
                     await addDoc(collectionRef, data);
                     console.log("Document successfully written!");
                     
@@ -381,7 +401,7 @@
 
                 } catch (error) {
                     console.error("Error writing document: ", error);
-                    alert("Error saving entry. Please check the console for details.");
+                    alert(`Error saving entry: ${error.message}`);
                 } finally {
                     saveButton.disabled = false;
                     saveButton.textContent = 'Save Entry';

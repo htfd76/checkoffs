@@ -49,6 +49,7 @@
         // Firebase Imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getFirestore, collection, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
         // --- Firebase Configuration ---
         const firebaseConfig = {
@@ -67,7 +68,8 @@
         try {
              app = initializeApp(firebaseConfig);
              db = getFirestore(app);
-             console.log("Firebase initialized successfully");
+             const auth = getAuth(app);
+             signInAnonymously(auth).then(() => console.log("Signed in anonymously for viewing."));
         } catch(e) {
             console.error("Firebase initialization error:", e);
             document.getElementById('entriesList').innerHTML = `<p class="text-red-500">Error: Could not connect to the database. Please check the console.</p>`;
@@ -197,7 +199,8 @@
                     .section h3 { font-size: 12px; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 2px; margin-bottom: 6px; }
                     .item { padding: 1px 0; }
                     .item-label { font-weight: bold; }
-                    .comments-section { margin-top: 10px; }
+                    .comments-section, .photo-section { margin-top: 10px; }
+                    .photo-section img { max-width: 100%; height: auto; border-radius: 4px; }
                 </style>
                 <div class="header">
                     <h1>Harmony Township EMS</h1>
@@ -222,13 +225,11 @@
                     </div>
                 `;
             }
-
-            // Note: Photos in PDFs from URLs can be tricky due to CORS. This might not always work.
-            if (entry.photoURL) {
-                 content += `
-                    <div class="section comments-section" style="margin-top: 10px; page-break-inside: avoid;">
+             if (entry.photoURL) {
+                content += `
+                    <div class="section photo-section">
                         <h3>Photo</h3>
-                         <img src="${entry.photoURL}" style="max-width: 100%; height: auto; border-radius: 4px;" alt="Checklist Photo"/>
+                        <img src="${entry.photoURL}" alt="Checklist Photo">
                     </div>
                 `;
             }
@@ -355,16 +356,14 @@
 
                 let detailsContent = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start"><div class="flex flex-col">${leftColHtml}</div><div class="flex flex-col">${middleColHtml}</div><div class="flex flex-col">${rightColHtml}</div></div>`;
                 
-                if (entry.comments || entry.photoURL) {
-                    detailsContent += `<div class="mt-4 p-3 border border-gray-200 rounded-md bg-white shadow-sm col-span-1 lg:col-span-3">`;
-                    if (entry.comments) {
-                        detailsContent += `<h4 class="font-semibold text-lg mb-2 text-gray-800 border-b pb-1">Comments</h4><p class="text-base mt-2 mb-4">${entry.comments}</p>`;
-                    }
-                    if (entry.photoURL) {
-                        detailsContent += `<h4 class="font-semibold text-lg mb-2 text-gray-800 border-b pb-1">Photo</h4><div class="mt-2"><a href="${entry.photoURL}" target="_blank" rel="noopener noreferrer"><img src="${entry.photoURL}" alt="Checklist Photo" class="max-w-xs h-auto rounded-md shadow-lg"></a></div>`;
-                    }
-                    detailsContent += `</div>`;
+                 if (entry.photoURL) {
+                     detailsContent += `<div class="mt-4 p-3 border border-gray-200 rounded-md bg-white shadow-sm"><h4 class="font-semibold text-lg mb-2 text-gray-800 border-b pb-1">Photo</h4><div class="mt-2"><a href="${entry.photoURL}" target="_blank" rel="noopener noreferrer"><img src="${entry.photoURL}" alt="Checklist Photo" class="rounded-lg shadow-md max-w-full h-auto sm:max-w-md"/></a></div></div>`;
                 }
+
+                if (entry.comments) {
+                     detailsContent += `<div class="mt-4 p-3 border border-gray-200 rounded-md bg-white shadow-sm"><h4 class="font-semibold text-lg mb-2 text-gray-800 border-b pb-1">Comments</h4><p class="text-base mt-2">${entry.comments}</p></div>`;
+                }
+
 
                 detailsContainer.innerHTML = detailsContent;
                 itemContainer.appendChild(header);
@@ -403,3 +402,5 @@
     </script>
 </body>
 </html>
+
+
