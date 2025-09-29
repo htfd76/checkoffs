@@ -223,6 +223,13 @@
             <h2 class="text-lg font-semibold mb-2 text-gray-900">Comments</h2>
             <textarea id="comments" name="comments" rows="3" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" placeholder="Enter any comments or notes here..."></textarea>
         </div>
+        
+        <!-- Photo Upload Section -->
+        <div class="bg-white p-4 rounded-lg shadow-md mt-4">
+            <h2 class="text-lg font-semibold mb-2 text-gray-900">Upload Photo</h2>
+            <input type="file" id="photo-upload" accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+            <div id="image-preview" class="mt-4"></div>
+        </div>
 
 
         <!-- Action Buttons -->
@@ -237,7 +244,7 @@
 
         <!-- Footer -->
         <footer class="text-center mt-6">
-            <p class="text-xs text-gray-600">*WHEN YOU HIT "SAVE ENTRY" IT WILL SAVE AND DIRECT YOU TO UPLOAD THE LIFEPAK PRINTOFF*</p>
+            <p class="text-xs text-gray-600">*Staple Life Pac check sheet on backside*</p>
         </footer>
     </div>
 
@@ -246,6 +253,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
         // --- Firebase Configuration ---
         const firebaseConfig = {
@@ -260,7 +268,7 @@
         const appId = firebaseConfig.appId;
         
         // --- Firebase Globals ---
-        let app, db, auth;
+        let app, db, auth, storage;
         
         // --- Main App Logic ---
         const main = async () => {
@@ -268,6 +276,7 @@
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
+                storage = getStorage(app);
                 await signInAnonymously(auth);
                 console.log("Firebase initialized and signed in anonymously");
             } catch(e) {
@@ -278,6 +287,24 @@
                     alert("Error: Could not connect to the database. Please check the console.");
                 }
             }
+            
+            // --- Image Preview Logic ---
+            const photoUploadInput = document.getElementById('photo-upload');
+            const imagePreview = document.getElementById('image-preview');
+
+            photoUploadInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        imagePreview.innerHTML = `<img src="${event.target.result}" alt="Image preview" class="max-w-xs max-h-48 rounded-lg shadow-md"/>`;
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    imagePreview.innerHTML = '';
+                }
+            });
+
 
             // --- UI Logic for Hiding DEF field ---
             const vehicleSelect = document.getElementById('vehicle');
@@ -321,6 +348,7 @@
             document.getElementById('saveEntryButton').addEventListener('click', async () => {
                 const saveButton = document.getElementById('saveEntryButton');
                 const collectionRef = getChecklistCollection();
+                const file = photoUploadInput.files[0];
 
                 if (!collectionRef) {
                     alert("Cannot save: Database connection not available.");
@@ -338,12 +366,18 @@
                 saveButton.textContent = 'Saving...';
 
                 try {
+                    if (file) {
+                        const fileName = `${Date.now()}_${file.name}`;
+                        const storageRef = ref(storage, `checklist-photos/${fileName}`);
+                        const snapshot = await uploadBytes(storageRef, file);
+                        data.photoURL = await getDownloadURL(snapshot.ref);
+                    }
+
                     await addDoc(collectionRef, data);
                     console.log("Document successfully written!");
                     
-                    // alert('Entry saved successfully!');
-                    // window.location.reload();
-                    window.location.href = 'https://forms.gle/gdaBMi8zLhMjPneJ8';
+                    alert('Entry saved successfully!');
+                    window.location.reload();
 
                 } catch (error) {
                     console.error("Error writing document: ", error);
@@ -360,4 +394,3 @@
     </script>
 </body>
 </html>
-
