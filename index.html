@@ -223,12 +223,6 @@
             <h2 class="text-lg font-semibold mb-2 text-gray-900">Comments</h2>
             <textarea id="comments" name="comments" rows="3" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" placeholder="Enter any comments or notes here..."></textarea>
         </div>
-        
-        <!-- Photo Upload Section -->
-        <div class="bg-white p-4 rounded-lg shadow-md mt-4">
-            <h2 class="text-lg font-semibold mb-2 text-gray-900">Upload Photo (Optional)</h2>
-            <input type="file" id="photo-upload" name="photo-upload" accept="image/*" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
-        </div>
 
 
         <!-- Action Buttons -->
@@ -247,13 +241,11 @@
         </footer>
     </div>
 
-    <!-- Saved Entries Display Removed -->
-
     <script type="module">
         // Firebase Imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
         // --- Firebase Configuration ---
         const firebaseConfig = {
@@ -267,103 +259,103 @@
         };
         const appId = firebaseConfig.appId;
         
-        // --- Initialize Firebase ---
-        let app, db, storage;
-        try {
-             app = initializeApp(firebaseConfig);
-             db = getFirestore(app);
-             storage = getStorage(app);
-             console.log("Firebase initialized successfully");
-        } catch(e) {
-            console.error("Firebase initialization error:", e);
-            alert("Error: Could not connect to the database. Please check the console.");
-        }
+        // --- Firebase Globals ---
+        let app, db, auth;
         
-        // --- UI Logic for Hiding DEF field ---
-        const vehicleSelect = document.getElementById('vehicle');
-        const defLevelContainer = document.getElementById('def-level-container');
-
-        const toggleDefField = () => {
-            if (vehicleSelect.value === '2-76') {
-                defLevelContainer.style.display = 'none';
-            } else {
-                defLevelContainer.style.display = 'flex'; // Use 'flex' as it's a flex container
+        // --- Main App Logic ---
+        const main = async () => {
+             try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                await signInAnonymously(auth);
+                console.log("Firebase initialized and signed in anonymously");
+            } catch(e) {
+                console.error("Firebase initialization error:", e);
+                if (e.code === 'auth/configuration-not-found') {
+                    alert("Authentication Error: Anonymous sign-in is not enabled for this project. Please enable it in your Firebase console's Authentication settings.");
+                } else {
+                    alert("Error: Could not connect to the database. Please check the console.");
+                }
             }
-        };
 
-        vehicleSelect.addEventListener('change', toggleDefField);
-        // Initial check in case of page reload with a selection
-        toggleDefField();
+            // --- UI Logic for Hiding DEF field ---
+            const vehicleSelect = document.getElementById('vehicle');
+            const defLevelContainer = document.getElementById('def-level-container');
+
+            const toggleDefField = () => {
+                if (vehicleSelect.value === '2-76') {
+                    defLevelContainer.style.display = 'none';
+                } else {
+                    defLevelContainer.style.display = 'flex'; 
+                }
+            };
+
+            vehicleSelect.addEventListener('change', toggleDefField);
+            toggleDefField();
 
 
-        // --- Firestore Collection Reference ---
-        const getChecklistCollection = () => {
-            return collection(db, `artifacts/${appId}/public/data/checklists`);
-        };
+            // --- Firestore Collection Reference ---
+            const getChecklistCollection = () => {
+                return collection(db, `artifacts/${appId}/public/data/checklists`);
+            };
 
-        // --- Gather Form Data ---
-        const getFormData = () => {
-            const formData = {};
-            const inputs = document.querySelectorAll('#form-container input, #form-container select, #form-container textarea');
-            inputs.forEach(input => {
-                if (input.id && input.type !== 'file') { // Exclude file input from this initial data gathering
-                    if (input.type === 'checkbox') {
-                        formData[input.id] = input.checked;
-                    } else {
-                        formData[input.id] = input.value;
+            // --- Gather Form Data ---
+            const getFormData = () => {
+                const formData = {};
+                const inputs = document.querySelectorAll('#form-container input, #form-container select, #form-container textarea');
+                inputs.forEach(input => {
+                    if (input.id && input.type !== 'file') {
+                        if (input.type === 'checkbox') {
+                            formData[input.id] = input.checked;
+                        } else {
+                            formData[input.id] = input.value;
+                        }
                     }
+                });
+                formData.createdAt = serverTimestamp();
+                return formData;
+            };
+
+            // --- Save Entry to Firestore ---
+            document.getElementById('saveEntryButton').addEventListener('click', async () => {
+                const saveButton = document.getElementById('saveEntryButton');
+                const collectionRef = getChecklistCollection();
+
+                if (!collectionRef) {
+                    alert("Cannot save: Database connection not available.");
+                    return;
+                }
+                
+                const data = getFormData();
+
+                if (!data.date || !data.personnel || !data.vehicle) {
+                    alert("Please fill out the Date, Personnel, and Vehicle fields before saving.");
+                    return;
+                }
+
+                saveButton.disabled = true;
+                saveButton.textContent = 'Saving...';
+
+                try {
+                    await addDoc(collectionRef, data);
+                    console.log("Document successfully written!");
+                    
+                    // alert('Entry saved successfully!');
+                    // window.location.reload();
+                    window.location.href = 'https://forms.gle/gdaBMi8zLhMjPneJ8';
+
+                } catch (error) {
+                    console.error("Error writing document: ", error);
+                    alert("Error saving entry. Please check the console for details.");
+                } finally {
+                    saveButton.disabled = false;
+                    saveButton.textContent = 'Save Entry';
                 }
             });
-            formData.createdAt = serverTimestamp(); // Add a server-side timestamp
-            return formData;
         };
 
-        // --- Save Entry to Firestore ---
-        document.getElementById('saveEntryButton').addEventListener('click', async () => {
-            const saveButton = document.getElementById('saveEntryButton');
-            const collectionRef = getChecklistCollection();
-            const photoUploadInput = document.getElementById('photo-upload');
-            const file = photoUploadInput.files[0];
-
-            if (!collectionRef) {
-                alert("Cannot save: Database connection not available.");
-                return;
-            }
-            
-            const data = getFormData();
-
-            if (!data.date || !data.personnel || !data.vehicle) {
-                alert("Please fill out the Date, Personnel, and Vehicle fields before saving.");
-                return;
-            }
-
-            saveButton.disabled = true;
-            saveButton.textContent = 'Saving...';
-
-            try {
-                // If a file is selected, upload it first
-                if (file) {
-                    const storageRef = ref(storage, `checklist-photos/${Date.now()}_${file.name}`);
-                    const snapshot = await uploadBytes(storageRef, file);
-                    const downloadURL = await getDownloadURL(snapshot.ref);
-                    data.photoURL = downloadURL; // Add photo URL to the data to be saved
-                }
-
-                await addDoc(collectionRef, data);
-                console.log("Document successfully written!");
-                
-                // Reset form fields after saving by reloading the page for simplicity
-                alert('Entry saved successfully!');
-                window.location.reload();
-
-            } catch (error) {
-                console.error("Error writing document: ", error);
-                alert("Error saving entry. Please check the console for details.");
-            } finally {
-                saveButton.disabled = false;
-                saveButton.textContent = 'Save Entry';
-            }
-        });
+        main();
 
     </script>
 </body>
