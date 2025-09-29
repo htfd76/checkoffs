@@ -118,12 +118,35 @@
             { title: 'Outside Compartment', keys: ['bb-collars', 'stair-chair', 'vac-u-splints', 'traction-splints', 'triage-bag', 'lucas-battery'] },
             { title: 'Comments', keys: ['comments'] }
         ];
+
+        // --- Helper to convert image to data URL to embed in PDF ---
+        const imageToDataUrl = (url) => {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.crossOrigin = 'Anonymous'; // Request CORS permission from the server
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.height = img.naturalHeight;
+                    canvas.width = img.naturalWidth;
+                    ctx.drawImage(img, 0, 0);
+                    const dataUrl = canvas.toDataURL();
+                    resolve(dataUrl);
+                };
+                img.onerror = (err) => {
+                    console.error("Failed to load image for PDF conversion:", err);
+                    reject(err);
+                };
+                // Prepend a CORS proxy to help with servers that don't have open policies
+                img.src = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+            });
+        };
         
-        // --- Generate PDF for a single entry ---
-        const generatePdfForEntry = (entry) => {
+        // --- Generate Report (PDF) for a single entry ---
+        const generatePdfForEntry = async (entry) => {
             const dateForTitle = entry.date || 'N_A';
             const vehicleForTitle = entry.vehicle || 'N_A';
-            const filename = `Checklist_${vehicleForTitle}_${dateForTitle}.pdf`;
+            const filename = `Report_${vehicleForTitle}_${dateForTitle}.pdf`;
 
             let formattedDate = 'N/A';
             if (entry.date) {
@@ -143,17 +166,22 @@
             const middleColumnSections = ['Patient Compartments', 'LifePak', 'Intubation Kit', 'Drug Compartments'];
             const rightColumnSections = ['First-In Bag', 'Inside Compartment', 'Outside Compartment'];
 
+            const nonCheckboxFields = [
+                'date', 'personnel', 'vehicle', 'comments', 'odometer',
+                'fuel-level', 'def-level', 'o2-stationary', 'o2-portable',
+                'lifepak-battery-notes', 'als-drug-bag-exp', 'als-bag-tag', 'exp-date-drugs'
+            ];
+
             sections.forEach(section => {
                  if(section.title === 'Comments') return;
                  
                  const sectionItems = [];
                  section.keys.forEach(key => {
                     const value = entry[key];
-                    if (value) {
-                         const label = fieldLabels[key] || key;
-                         if (typeof value === 'boolean' && value === true) {
-                            sectionItems.push(`<div class="item">✓ ${label}</div>`);
-                         } else if (typeof value !== 'boolean') {
+                    const label = fieldLabels[key] || key;
+
+                    if (nonCheckboxFields.includes(key)) {
+                         if (value) {
                             let displayValue = value;
                             if (key === 'als-drug-bag-exp' && value.includes('-')) {
                                 const parts = value.split('-');
@@ -166,6 +194,12 @@
                             if(key === 'def-level' && entry.vehicle === '2-76') return;
                             sectionItems.push(`<div class="item"><span class="item-label">${label}:</span> ${displayValue}</div>`);
                          }
+                    } else {
+                        if (value === true) {
+                            sectionItems.push(`<div class="item"><span style="color: green; font-weight: bold;">✓</span> ${label}</div>`);
+                        } else {
+                            sectionItems.push(`<div class="item"><span style="color: red; font-weight: bold;">✗</span> ${label}</div>`);
+                        }
                     }
                  });
 
@@ -199,7 +233,7 @@
                     .section h3 { font-size: 12px; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 2px; margin-bottom: 6px; }
                     .item { padding: 1px 0; }
                     .item-label { font-weight: bold; }
-                    .comments-section, .photo-section { margin-top: 10px; }
+                    .comments-section, .photo-section { margin-top: 10px; page-break-inside: avoid; }
                     .photo-section img { max-width: 100%; height: auto; border-radius: 4px; }
                 </style>
                 <div class="header">
@@ -226,12 +260,22 @@
                 `;
             }
              if (entry.photoURL) {
-                content += `
-                    <div class="section photo-section">
-                        <h3>Photo</h3>
-                        <img src="${entry.photoURL}" alt="Checklist Photo">
-                    </div>
-                `;
+                try {
+                    const imageDataUrl = await imageToDataUrl(entry.photoURL);
+                    content += `
+                        <div class="section photo-section">
+                            <h3>Photo</h3>
+                            <img src="${imageDataUrl}" alt="Checklist Photo">
+                        </div>
+                    `;
+                } catch (error) {
+                    content += `
+                        <div class="section photo-section">
+                            <h3>Photo</h3>
+                            <p>Error loading image for report. View at: <a href="${entry.photoURL}">${entry.photoURL}</a></p>
+                        </div>
+                    `;
+                }
             }
 
 
@@ -265,7 +309,7 @@
 
                 // --- Header ---
                 const header = document.createElement('div');
-                header.className = 'p-3 flex justify-between items-center';
+                header.className = 'p-3 flex justify-between items-center flex-wrap';
                 
                 let displayDate = 'No Date';
                 if (entry.date) {
@@ -287,11 +331,12 @@
                 `;
                 
                 const buttonGroup = document.createElement('div');
-                buttonGroup.className = 'flex items-center space-x-4';
+                buttonGroup.className = 'flex items-center space-x-4 mt-2 sm:mt-0';
                 
                 const pdfButton = document.createElement('button');
                 pdfButton.className = 'generate-pdf-btn text-sm font-medium text-gray-600 hover:text-red-600 transition flex items-center';
-                pdfButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm2 10a1 1 0 10-2 0v3a1 1 0 102 0v-3zm2-3a1 1 0 011 1v5a1 1 0 11-2 0v-5a1 1 0 011-1zm4-1a1 1 0 10-2 0v7a1 1 0 102 0V8z" clip-rule="evenodd" /></svg> PDF`;
+                const originalButtonContent = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm2 10a1 1 0 10-2 0v3a1 1 0 102 0v-3zm2-3a1 1 0 011 1v5a1 1 0 11-2 0v-5a1 1 0 011-1zm4-1a1 1 0 10-2 0v7a1 1 0 102 0V8z" clip-rule="evenodd" /></svg> Generate Report`;
+                pdfButton.innerHTML = originalButtonContent;
 
                 const toggleIcon = document.createElement('div');
                 toggleIcon.className = 'toggle-icon text-sm font-medium text-blue-600 cursor-pointer';
@@ -379,9 +424,19 @@
                 summaryDiv.addEventListener('click', toggleDetails);
                 toggleIcon.addEventListener('click', toggleDetails);
                 
-                pdfButton.addEventListener('click', (e) => {
+                pdfButton.addEventListener('click', async (e) => {
                     e.stopPropagation();
-                    generatePdfForEntry(entry);
+                    pdfButton.disabled = true;
+                    pdfButton.innerHTML = 'Generating...';
+                    try {
+                        await generatePdfForEntry(entry);
+                    } catch (error) {
+                        console.error("Failed to generate PDF:", error);
+                        alert("There was an error generating the report. Please try again.");
+                    } finally {
+                        pdfButton.disabled = false;
+                        pdfButton.innerHTML = originalButtonContent;
+                    }
                 });
             });
         };
@@ -402,5 +457,3 @@
     </script>
 </body>
 </html>
-
-
